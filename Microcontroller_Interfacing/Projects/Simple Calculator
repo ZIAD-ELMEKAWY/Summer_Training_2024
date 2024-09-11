@@ -1,0 +1,235 @@
+/* 
+ * File:   application.c
+ * Author: Ziad Elmekawy 
+ * Simple Calculator project 
+ * Created on 21 August, 2024 
+ */
+
+
+#include <pic18f4620.h>
+#include "math.h"
+#include "application.h"
+#include "ECU_Layer/Keypad/ecu_keypad.h"
+#include "ECU_Layer/Char_LCD/ecu_char_lcd.h"
+
+/* ======= Objects ======= */
+// Keypad_1 ( at PORTC )
+keypad_t Keypad_1 = 
+{ 
+    // Rows
+    .keypad_row_pins[0].port = PORTC_INDEX ,
+    .keypad_row_pins[0].pin = PIN0 ,
+    .keypad_row_pins[0].direction = GPIO_DIRECTION_OUTPUT ,
+    .keypad_row_pins[0].logic = GPIO_LOW, 
+            
+    .keypad_row_pins[1].port = PORTC_INDEX ,
+    .keypad_row_pins[1].pin = PIN1 ,
+    .keypad_row_pins[1].direction = GPIO_DIRECTION_OUTPUT ,
+    .keypad_row_pins[1].logic = GPIO_LOW,
+            
+    .keypad_row_pins[2].port = PORTC_INDEX ,
+    .keypad_row_pins[2].pin = PIN2 ,
+    .keypad_row_pins[2].direction = GPIO_DIRECTION_OUTPUT ,
+    .keypad_row_pins[2].logic = GPIO_LOW,
+            
+    .keypad_row_pins[3].port = PORTC_INDEX ,
+    .keypad_row_pins[3].pin = PIN3 ,
+    .keypad_row_pins[3].direction = GPIO_DIRECTION_OUTPUT ,
+    .keypad_row_pins[3].logic = GPIO_LOW,
+    
+    // Columns 
+    .keypad_column_pins[0].port = PORTC_INDEX ,
+    .keypad_column_pins[0].pin = PIN4 ,
+    .keypad_column_pins[0].direction =  GPIO_DIRECTION_INPUT,
+    .keypad_column_pins[0].logic = GPIO_LOW , 
+            
+    .keypad_column_pins[1].port = PORTC_INDEX ,
+    .keypad_column_pins[1].pin = PIN5 ,
+    .keypad_column_pins[1].direction = GPIO_DIRECTION_INPUT ,
+    .keypad_column_pins[1].logic = GPIO_LOW,
+            
+    .keypad_column_pins[2].port = PORTC_INDEX ,
+    .keypad_column_pins[2].pin = PIN6 ,
+    .keypad_column_pins[2].direction = GPIO_DIRECTION_INPUT ,
+    .keypad_column_pins[2].logic = GPIO_LOW,
+            
+    .keypad_column_pins[3].port = PORTC_INDEX ,
+    .keypad_column_pins[3].pin = PIN7 ,
+    .keypad_column_pins[3].direction = GPIO_DIRECTION_INPUT ,
+    .keypad_column_pins[3].logic = GPIO_LOW,
+};
+
+// LCD 4-Bit ( at PORTD )
+chr_lcd_4bit_t lcd_1 =
+{ 
+    .lcd_data[0].port  = PORTD_INDEX ,
+    .lcd_data[0].pin = PIN0 ,
+    .lcd_data[0].direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_data[0].logic = GPIO_LOW ,
+    
+    .lcd_data[1].port  = PORTD_INDEX ,
+    .lcd_data[1].pin = PIN1 ,
+    .lcd_data[1].direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_data[1].logic = GPIO_LOW ,
+    
+    .lcd_data[2].port  = PORTD_INDEX ,
+    .lcd_data[2].pin = PIN2 ,
+    .lcd_data[2].direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_data[2].logic = GPIO_LOW ,
+    
+    .lcd_data[3].port  = PORTD_INDEX ,
+    .lcd_data[3].pin = PIN3 ,
+    .lcd_data[3].direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_data[3].logic = GPIO_LOW ,
+    
+    .lcd_rs = PORTD_INDEX ,
+    .lcd_rs.pin = PIN4 ,
+    .lcd_rs.direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_rs.logic = GPIO_LOW ,
+    
+    .lcd_en = PORTD_INDEX ,
+    .lcd_en.pin = PIN5 ,
+    .lcd_en.direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_en.logic = GPIO_LOW 
+};
+
+/* ======= Global Variables ======= */
+volatile uint8 KPD_Value = 0 ;
+volatile uint8 KPD_opera = 0 ;
+volatile uint8 Counter_Space =1 ;
+volatile uint8 Counter_Var1 = 0 ;
+volatile uint8 Counter_Var2 = 0 ;
+static uint8 var1[6]  ;
+static uint8 var2[6] ;
+volatile uint16 result = 0 ;
+volatile uint8 ret_string[20]  ;
+volatile uint16 Ret_Total_Num_Var1 = 0 ;
+volatile uint16 Ret_Total_Num_Var2 = 0 ;
+
+/******************* ^-^ Helper Function ^-^ ****************/
+uint16 Return_Total_Number (uint8 Num_Arr[6]);
+void Array_Zero (uint8 arr[6]);
+/****************************** ^-^ Main Function Start ^-^ ***********************/
+int main() 
+{
+    Std_ReturnType ret = E_NOK ;
+    application_initialize();
+    
+    ret = LCD_4bit_Send_String(&lcd_1 , "Welcome") ;
+    __delay_ms(500);
+    ret = LCD_4bit_Send_Command(&lcd_1 , _LCD_CLEAR);
+    
+    
+    while(1)
+    {
+        ret = Keypad_get_value(&Keypad_1 , &KPD_Value);
+        if (KPD_Value == '=')
+            {
+                Ret_Total_Num_Var1 = Return_Total_Number(var1);
+                Ret_Total_Num_Var2 = Return_Total_Number(var2);
+                switch(KPD_opera)
+                {
+                    case '+' : result = (Ret_Total_Num_Var1+Ret_Total_Num_Var2); break ;
+                    case '-' :  result = (Ret_Total_Num_Var1-Ret_Total_Num_Var2); break ;
+                    case '*' :  result = (Ret_Total_Num_Var1*Ret_Total_Num_Var2); break ;
+                    case '%' :
+                        if(Ret_Total_Num_Var1 == 0)
+                        {
+                            result = 0 ; 
+                        }
+                        else if (Ret_Total_Num_Var2 == 0)
+                        {
+                            ret = LCD_4bit_Send_Command(&lcd_1 , _LCD_CLEAR);
+                            ret = LCD_4bit_Send_String_Pos( &lcd_1 , "Infinite Error" , 1 , 3 );
+                        }
+                        else 
+                        {
+                            result = (uint8)(Ret_Total_Num_Var1%Ret_Total_Num_Var2); 
+                        }
+                        break ;
+                }
+                ret = convert_uint16_to_string(result , ret_string);
+                ret = LCD_4bit_Send_String_Pos(&lcd_1 , &ret_string  , 2  , 1);
+        }
+        else { /* Nothing */}
+        if (KPD_Value != '\0')
+        {
+            ret = LCD_4bit_Send_Char_Data_Pos(&lcd_1 , KPD_Value ,  1 , Counter_Space);
+            Counter_Space++ ;
+            if((KPD_Value == '+') || (KPD_Value == '-') || (KPD_Value == '*') || (KPD_Value == '%'))
+            {
+                KPD_opera = KPD_Value;
+                KPD_Value = '\0' ;
+            }
+            if ((KPD_Value=='9') || (KPD_Value=='8') || (KPD_Value=='7') || (KPD_Value=='6') || (KPD_Value=='5') || (KPD_Value=='4') || (KPD_Value=='3') || (KPD_Value=='2') || (KPD_Value=='1') || (KPD_Value>='0'))
+            {
+                if((KPD_opera == '+') || (KPD_opera == '-') || (KPD_opera == '*') || (KPD_opera == '%'))
+                {
+                    var2[Counter_Var2] = Keypad_Convert_from_char_to_int(KPD_Value);
+                    Counter_Var2++;
+                }
+                else
+                {
+                    var1[Counter_Var1] = Keypad_Convert_from_char_to_int(KPD_Value);
+                    Counter_Var1++;
+                }
+                KPD_Value = '\0' ;
+            }
+            if (KPD_Value == '#')                                          /* For ON Pin */
+            {
+                Counter_Space = 1 ;
+                Counter_Var1 = 0 ;
+                Counter_Var2 = 0 ;
+                result = 0 ;
+                Ret_Total_Num_Var1 = 0 ;
+                Ret_Total_Num_Var2 = 0 ;
+                Array_Zero(var1);
+                Array_Zero(var2);
+                KPD_opera = 0 ;
+                ret = LCD_4bit_Send_Command(&lcd_1 , _LCD_CLEAR);
+            }
+            else { /* Nothing */ }
+        }
+        else 
+        { /* Nothing */ }
+    }
+    
+    return (EXIT_SUCCESS);
+}
+/****************************** ^-^ Main Function End ^-^ ************************/
+
+/******************* ^-^ application_initialize Function Start ^-^ ****************/
+void application_initialize (void)
+{
+    Std_ReturnType ret = E_NOK ;
+    ecu_layer_initialize();
+    ret = LCD_4bit_Initialize(&lcd_1);
+    ret = Keypad_initialize(&Keypad_1);
+}
+/******************* ^-^ application_initialize Function End ^-^ *****************/
+
+/******************* ^-^ Helper Function Start ^-^ ****************/
+
+uint16 Return_Total_Number (uint8 Num_Arr[6])
+{
+    Std_ReturnType ret = E_OK ;
+    uint8 l_counter = 0 ;
+    uint16 res = 0 ;
+    while(l_counter<3 )
+    {
+        res = (res * 10 ) + (Num_Arr[l_counter]);
+        l_counter++ ;
+    }
+    return res ;
+}
+
+void Array_Zero (uint8 arr[6])
+{
+    uint8 arr_counter = 0 ;
+    for (arr_counter = 0 ; arr_counter<6 ; arr_counter++)
+    {
+        arr[arr_counter ] = 0 ;
+    }
+}
+
+/******************* ^-^ Helper Function End ^-^ ****************/
