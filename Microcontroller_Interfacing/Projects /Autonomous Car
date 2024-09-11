@@ -1,0 +1,175 @@
+/* 
+ * File:   application.c
+ * Author: Ziad Elmekawy 
+ *
+ * Created on 22 August, 2024, 10:23 PM
+ */
+
+#include "application.h"
+#include "ECU_Layer/DC_Motor/ecu_dc_motor.h"
+#include "ECU_Layer/Ultrasonic_Sensor/ecu_ultrasonic_sensor.h"
+#include "ECU_Layer/Char_LCD/ecu_char_lcd.h"
+#include "ECU_Layer/Buzzer/ecu_buzzer.h"
+
+// LCD 4-Bit
+chr_lcd_4bit_t lcd_1 =
+{ 
+    .lcd_data[0].port  = PORTD_INDEX ,
+    .lcd_data[0].pin = PIN2 ,
+    .lcd_data[0].direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_data[0].logic = GPIO_LOW ,
+    
+    .lcd_data[1].port  = PORTD_INDEX ,
+    .lcd_data[1].pin = PIN3 ,
+    .lcd_data[1].direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_data[1].logic = GPIO_LOW ,
+    
+    .lcd_data[2].port  = PORTD_INDEX ,
+    .lcd_data[2].pin = PIN4 ,
+    .lcd_data[2].direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_data[2].logic = GPIO_LOW ,
+    
+    .lcd_data[3].port  = PORTD_INDEX ,
+    .lcd_data[3].pin = PIN5 ,
+    .lcd_data[3].direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_data[3].logic = GPIO_LOW ,
+    
+    .lcd_rs = PORTD_INDEX ,
+    .lcd_rs.pin = PIN6 ,
+    .lcd_rs.direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_rs.logic = GPIO_LOW ,
+    
+    .lcd_en = PORTD_INDEX ,
+    .lcd_en.pin = PIN7 ,
+    .lcd_en.direction = GPIO_DIRECTION_OUTPUT ,
+    .lcd_en.logic = GPIO_LOW 
+};
+
+// Motors
+dc_motor_t Motor_1 =
+{
+   .dc_motor_pin[0].port = PORTC_INDEX , 
+   .dc_motor_pin[0].pin  = PIN0 ,
+   .dc_motor_pin[0].direction = GPIO_DIRECTION_OUTPUT ,
+   .dc_motor_pin[0].logic = GPIO_LOW ,
+   
+   .dc_motor_pin[1].port = PORTC_INDEX , 
+   .dc_motor_pin[1].pin  = PIN1 ,
+   .dc_motor_pin[1].direction = GPIO_DIRECTION_OUTPUT ,
+   .dc_motor_pin[1].logic = GPIO_LOW 
+};
+
+dc_motor_t Motor_2 =
+{
+   .dc_motor_pin[0].port = PORTC_INDEX , 
+   .dc_motor_pin[0].pin  = PIN2 ,
+   .dc_motor_pin[0].direction = GPIO_DIRECTION_OUTPUT ,
+   .dc_motor_pin[0].logic = GPIO_LOW ,
+   
+   .dc_motor_pin[1].port = PORTC_INDEX , 
+   .dc_motor_pin[1].pin  = PIN3 ,
+   .dc_motor_pin[1].direction = GPIO_DIRECTION_OUTPUT ,
+   .dc_motor_pin[1].logic = GPIO_LOW 
+};
+
+buz_t buz1 = 
+{
+    .port_name = PORTB_INDEX ,
+    .pin = PIN0 ,
+    .buz_status = GPIO_LOW
+};
+
+/******************* ^-^ Helper Function ^-^ *****************/
+void init_timer(void);
+void Motor_Move_Forward (void);
+void Motor_Move_Backward(void);
+void Motor_Move_Right   (void);
+void Motor_Stop         (void);
+
+uint8 str[10];
+volatile uint16 distance = 0 ;
+/****************************** ^-^ Main Function Start ^-^ ***********************/
+int main() 
+{
+    Std_ReturnType ret = E_NOK ;
+    application_initialize();
+    
+    while(1)
+    {
+        ret = LCD_4bit_Send_Command(&lcd_1 , _LCD_CLEAR);
+        ret = LCD_4bit_Send_String_Pos(&lcd_1 , "Distance : " , 1 , 2 );
+        distance = measure_distance();  // Measure distance
+        ret = convert_uint16_to_string((distance+1) , str );
+        ret = LCD_4bit_Send_String_Pos(&lcd_1 , str , 2 , 1);
+        __delay_ms(500);  // Delay to avoid continuous triggering
+        if ((distance+1) <= 9)
+        {
+            ret = buz_turn_on(&buz1);
+            Motor_Stop();
+            __delay_ms(100);
+            Motor_Move_Backward();
+            __delay_ms(200);
+            Motor_Move_Right();
+            __delay_ms(250);
+            Motor_Move_Forward();
+        }
+        else 
+        {  
+            ret = buz_turn_off(&buz1);
+            Motor_Move_Forward();
+        }
+    }
+    return (EXIT_SUCCESS);
+}
+/****************************** ^-^ Main Function End ^-^ ************************/
+
+/******************* ^-^ application_initialize Function Start ^-^ ****************/
+void application_initialize (void)
+{
+    Std_ReturnType ret = E_NOK ;
+    ecu_layer_initialize();
+    ret = dc_motor_initialize(&Motor_1);
+    ret = dc_motor_initialize(&Motor_2);
+    ret = LCD_4bit_Initialize(&lcd_1);
+    ret = buz_intialize(&buz1);
+    init_timer();
+    init_ultrasonic();
+}
+/******************* ^-^ application_initialize Function End ^-^ *****************/
+
+/******************* ^-^ Helper Function ^-^ *****************/
+void init_timer(void) {
+    T1CON = 0x10;  // Configure Timer1 with 1:2 prescale
+}
+
+void Motor_Move_Forward (void)
+{
+    Std_ReturnType ret = E_OK ;
+    
+    ret = dc_motor_move_right(&Motor_1);
+    ret = dc_motor_move_right(&Motor_2);
+}
+void Motor_Move_Right   (void)
+{
+    Std_ReturnType ret = E_OK ;
+
+    ret = dc_motor_move_right(&Motor_2);
+    ret = dc_motor_stop(&Motor_1);
+}
+void Motor_Move_Backward(void)
+{
+    Std_ReturnType ret = E_OK ;
+    
+    ret = dc_motor_move_left(&Motor_1);
+    ret = dc_motor_move_left(&Motor_2);
+}
+
+void Motor_Stop         (void)
+{
+    Std_ReturnType ret = E_OK ;
+    
+    ret = dc_motor_stop(&Motor_1);
+    ret = dc_motor_stop(&Motor_2);
+    ret = LCD_4bit_Send_Command(&lcd_1 , _LCD_CLEAR);
+}
+
